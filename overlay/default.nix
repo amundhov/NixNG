@@ -24,6 +24,18 @@ in
     systemdSupport = false;
     pamSupport = true;
   };
+  syncthing = prev.syncthing.overrideAttrs
+    (old:
+      {
+        # Post-installation step currently does two things:
+        # 1. Copy man pages
+        # 2. Write sytemd service files if stdenv.isLinux
+        # We don't need man pages, and 2. puts a dependency on systemd-minimal, which
+        # NixNG is trying avoid.
+        # Will there be a suitable enable flag for systemd support in Nixpkgs?
+        # Simply skip postInstall for now. 
+        postInstall = "";  
+      });
   runit = prev.runit.overrideAttrs
     (old:
       {
