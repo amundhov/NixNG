@@ -8,7 +8,7 @@
 
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-22.05";
+    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-24.05";
   };
 
   outputs = { nixpkgs, self }:
@@ -18,18 +18,31 @@
       forAllSystems = forAllSystems' supportedSystems;
       pkgsForSystem = system:
         import nixpkgs { inherit system; overlays = [ self.overlays.default ]; };
+
+
+      inherit
+        (nixpkgs.lib)
+        recurseIntoAttrs
+        ;
     in
     {
       nglib = import ./lib nixpkgs.lib;
-      examples = import ./examples { inherit nixpkgs; inherit (self) nglib; };
+      examples = import ./examples { inherit nixpkgs; inherit (self) nglib; nixng = self; };
       overlays.default = import ./overlay;
+
+      legacyPackages = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; overlays = [ (import ./overlay) ]; };
+          lib = pkgs.lib;
+        in
+          lib.genAttrs (lib.attrNames (import ./overlay null null)) (packageName: pkgs.${packageName}));
 
       packages = forAllSystems (system:
         let
-          pkgs = import nixpkgs { inherit system; };
-          fix = import ./overlay fix pkgs;
+          lib = nixpkgs.lib;
         in
-          fix);
+          lib.filterAttrs (_: v: lib.isDerivation v) self.legacyPackages.${system}
+      );
 
       devShells = forAllSystems (system:
         let pkgs = pkgsForSystem system;
@@ -37,16 +50,12 @@
           { default = pkgs.mkShell {
               nativeBuildInputs = with pkgs;
                 [
-                  nixpkgs-fmt
-                  rnix-lsp
-                  dhall
-                  reuse
                 ];
             };
           });
 
-      hydraJobs = {
-        examples = nixpkgs.lib.mapAttrs (n: v: v.config.system.build.toplevel) self.examples;
+      checks = {
+        examples = recurseIntoAttrs (nixpkgs.lib.mapAttrs (n: v: v.config.system.build.toplevel) self.examples);
       };
     };
 }
